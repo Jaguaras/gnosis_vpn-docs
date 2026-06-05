@@ -35,6 +35,7 @@ jobs:
         id: deploy
         with:
           path-to-deploy: build
-          storacha-key: ${{ secrets.STORACHA_KEY }}
-          storacha-proof: ${{ secrets.STORACHA_PROOF }}
+          filebase-bucket: 'gnosis-vpn-docs'
+          filebase-access-key: ${{ secrets.FILEBASE_ACCESS_KEY }}
+          filebase-secret-key: ${{ secrets.FILEBASE_SECRET_KEY }}
           github-token: ${{ github.token }}
