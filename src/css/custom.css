@@ -207,3 +207,9 @@
 .navbar__items--right .colorModeToggle:hover {
   background: rgba(255, 255, 255, 0.1);
 }
+/* Info admonition in dark mode — dark indigo bg, light text */
+[data-theme="dark"] .theme-admonition-info {
+  background: #1c1a3a;
+  border-color: var(--gvpn-indigo);
+  color: #d8d6f0;
+}
