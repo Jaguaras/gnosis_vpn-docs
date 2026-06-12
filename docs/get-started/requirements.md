@@ -5,7 +5,7 @@ title: Requirements
 
 # System requirements
 
-Gnosis VPN Atlantis currently supports macOS and Linux. Windows, iOS, and Android are not supported in this release.
+Gnosis VPN El Dorado currently supports macOS and Linux (Debian). Windows, iOS, Android, and other Linux distributions are not supported in this release.
 
 ## Minimum requirements
 
