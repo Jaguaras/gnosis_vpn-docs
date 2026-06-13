@@ -9,7 +9,7 @@ const sidebars = {
       collapsed: false,
       items: [
         'introduction/overview',
-        'introduction/atlantis-mvp',
+        'introduction/el-dorado-beta',
         'introduction/architecture',
         'introduction/how-it-works',
       ],
