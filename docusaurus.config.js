@@ -99,7 +99,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Gnosis VPN — Atlantis MVP.`,
+        copyright: `Gnosis VPN — El Dorado.`,
       },
       prism: {
         theme: themes.github,
