@@ -5,7 +5,7 @@ title: How it works
 
 # How does Gnosis VPN work?
 
-Gnosis VPN operates by replacing the traditional, centralized VPN model with a decentralized, multi-hop routing system. Instead of trusting a single company's server with your traffic, Gnosis VPN separates the connection process across three distinct layers: your local Client, the decentralized HOPR Network, and an independent Exit node.
+Gnosis VPN operates by replacing the traditional, centralized VPN model with a decentralized, multi-hop routing system. Instead of trusting a single company's server with your traffic, Gnosis VPN separates the connection process across three distinct layers: your local client, the decentralized HOPR network, and an independent exit node.
 
 ## Establishing a connection
 

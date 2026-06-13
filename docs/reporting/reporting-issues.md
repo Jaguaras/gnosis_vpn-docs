@@ -89,7 +89,7 @@ List the exact steps needed to reproduce the issue.
 
 Include information about your system and Gnosis VPN version:
 
-- OS
+- Operating system
 - Gnosis VPN package version
 - Installation type: desktop app / CLI / headless
 - Exit node
