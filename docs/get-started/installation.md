@@ -9,7 +9,7 @@ There are currently two ways to install and set up Gnosis VPN El Dorado.
 
 ## Manual installation
 
-This route is open to everyone but assumes some technical knowledge. You download the client yourself, install it manually, and fund your VPN account with tokens before connecting.
+This route is open to everyone but assumes some technical knowledge. You'll download the client yourself, install it manually, and fund your VPN account with tokens before connecting.
 
 ### macOS
 
