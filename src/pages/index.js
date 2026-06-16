@@ -60,6 +60,22 @@ export default function Home() {
             </Link>
           ))}
         </div>
+        <div className="gvpnAgentNotice">
+          <strong>Using these docs</strong>
+          <p>
+            <span className="gvpnAgentLabel">For humans:</span>{' '}
+            browse the sidebar, or start with{' '}
+            <Link to="/docs/get-started/requirements">
+              Get started → Requirements
+            </Link>
+            .
+          </p>
+          <p>
+            <span className="gvpnAgentLabel">For LLMs &amp; AI agents:</span>{' '}
+            fetch <a href="/llms.txt">/llms.txt</a> first for a machine-readable
+            index of every page, then retrieve the specific pages you need.
+          </p>
+        </div>
       </main>
     </Layout>
   );

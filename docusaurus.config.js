@@ -8,14 +8,18 @@ const config = {
   favicon: 'img/favicon.ico',
 
   // Set these to your real deployment URL when you have one.
-  url: 'https://docs.gnosisvpn.com',
+  url: 'https://docs.vpn.gnosis.eth.limo',
   baseUrl: '/',
 
   // IMPORTANT for IPFS gateway routing.
   trailingSlash: true,
 
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
+  },
   onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
 
   i18n: {
     defaultLocale: 'en',
