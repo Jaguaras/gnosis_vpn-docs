@@ -30,7 +30,16 @@ const config = {
   stylesheets: [
     'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/dist/tabler-icons.min.css',
   ],
-
+  headTags: [
+    {
+      tagName: 'link',
+      attributes: {
+        rel: 'llms',
+        href: '/llms.txt',
+        type: 'text/markdown',
+      },
+    },
+  ],
   presets: [
     [
       'classic',

@@ -168,32 +168,6 @@
   color: var(--gvpn-indigo);
 }
 
-.gvpnAgentNotice {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.gvpnAgentNotice strong {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: var(--ifm-color-emphasis-700);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.gvpnAgentNotice p {
-  margin: 0.35rem 0;
-  color: var(--ifm-color-emphasis-800);
-}
-
 .gvpnAgentLabel {
   font-weight: 600;
 }
