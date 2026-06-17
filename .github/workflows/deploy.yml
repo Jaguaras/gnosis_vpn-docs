@@ -84,38 +84,28 @@ jobs:
             console.log('Outer CID:', outerCid);
             console.log('Folder name:', folderName);
 
-            // Resolve the inner (unwrapped) CID via X-Ipfs-Roots response header.
-            // Fetching any file under the folder returns this header listing all
-            // directory CIDs traversed: "outerCid,innerCid". We want index 1.
+            // Fetch the outer directory listing and parse the inner CID from the HTML.
+            // ipfs.io includes the inner CID in an href like:
+            //   /ipfs/<innerCid>?filename=<folderName>
+            // We fetch just the top-level directory (one block) — fast and reliable.
             let finalCid;
-            const url = `https://gateway.pinata.cloud/ipfs/${outerCid}/${encodeURIComponent(folderName)}/index.html`;
-            try {
-              const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
-              const roots = r.headers.get('X-Ipfs-Roots');
-              console.log('X-Ipfs-Roots:', roots);
-              if (roots) {
-                const parts = roots.split(',').map(s => s.trim());
-                finalCid = parts[1]; // parts[0]=outer, parts[1]=inner directory
-              }
-            } catch (e) {
-              console.warn('Pinata gateway failed:', e.message);
-            }
 
-            // Fallback: try ipfs.io
-            if (!finalCid) {
+            const tryParseInnerCid = (html) => {
+              const m = html.match(/\/ipfs\/(bafybei[a-z2-7A-Z0-9]+)\?filename=/);
+              return m ? m[1] : null;
+            };
+
+            // Primary: ipfs.io directory listing (wait briefly for DHT propagation)
+            await new Promise(r => setTimeout(r, 8000));
+            for (const gw of ['https://ipfs.io', 'https://cloudflare-ipfs.com', 'https://dweb.link']) {
               try {
-                const r = await fetch(
-                  `https://ipfs.io/ipfs/${outerCid}/${encodeURIComponent(folderName)}/index.html`,
-                  { signal: AbortSignal.timeout(20000) }
-                );
-                const roots = r.headers.get('X-Ipfs-Roots');
-                console.log('X-Ipfs-Roots (ipfs.io):', roots);
-                if (roots) {
-                  const parts = roots.split(',').map(s => s.trim());
-                  finalCid = parts[1];
-                }
+                const r = await fetch(`${gw}/ipfs/${outerCid}/`, { signal: AbortSignal.timeout(25000) });
+                const html = await r.text();
+                console.log(`${gw} status:`, r.status, '| body[:200]:', html.slice(0, 200));
+                finalCid = tryParseInnerCid(html);
+                if (finalCid) { console.log(`Resolved via ${gw}:`, finalCid); break; }
               } catch (e) {
-                console.warn('ipfs.io fallback failed:', e.message);
+                console.warn(`${gw} failed:`, e.message);
               }
             }
 
