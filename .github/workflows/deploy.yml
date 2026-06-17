@@ -43,40 +43,88 @@ jobs:
         run: |
           npm install pinata --no-save
 
-          # Build the IPFS directory locally — gives the canonical CID with
-          # index.html at root, no wrapper. main.js (432KB) gets chunked here.
-          CID=$(ipfs add -r --cid-version=1 --quieter build)
-          echo "Content CID: $CID"
+          # Compute the canonical inner CID locally (no wrapper, index.html at root).
+          # kubo and Pinata both use dag-pb + sha2-256 + balanced 256KB chunker,
+          # so this CID should match the inner directory Pinata creates.
+          LOCAL_CID=$(ipfs add -r --cid-version=1 --quieter build)
+          echo "Local CID: $LOCAL_CID"
 
-          # Export all blocks as a CAR. Pinata will store exactly these blocks,
-          # so the returned CID will equal the one kubo computed above.
-          ipfs dag export "$CID" > content.car
-
-          # Upload the CAR via pinata.upload.public.file().car()
-          CONTENT_CID="$CID" node <<'EOF'
+          LOCAL_CID="$LOCAL_CID" node <<'EOF'
           const fs = require('fs');
+          const path = require('path');
           const { PinataSDK } = require('pinata');
           const pinata = new PinataSDK({ pinataJwt: process.env.PINATA_JWT });
 
+          const mime = {
+            '.html':'text/html','.css':'text/css','.js':'application/javascript',
+            '.json':'application/json','.png':'image/png','.jpg':'image/jpeg',
+            '.jpeg':'image/jpeg','.gif':'image/gif','.svg':'image/svg+xml',
+            '.txt':'text/plain','.md':'text/markdown','.wasm':'application/wasm',
+            '.woff':'font/woff','.woff2':'font/woff2','.ico':'image/x-icon'
+          };
+
+          function collect(dir, base, out = []) {
+            for (const name of fs.readdirSync(dir)) {
+              const full = path.join(dir, name);
+              if (fs.statSync(full).isDirectory()) {
+                collect(full, base, out);
+              } else {
+                const rel = path.relative(base, full);
+                const buf = fs.readFileSync(full);
+                out.push(new File([buf], rel, { type: mime[path.extname(name).toLowerCase()] || 'application/octet-stream' }));
+              }
+            }
+            return out;
+          }
+
           (async () => {
-            const buf = fs.readFileSync('content.car');
-            const carFile = new File([buf], 'upload.car', { type: 'application/vnd.ipld.car' });
-            const result = await pinata.upload.public
-              .file(carFile)
-              .car()
-              .name(`${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`)
+            const files = collect('build', 'build');
+            console.log(`Uploading ${files.length} files...`);
+
+            // fileArray wraps files under a folder named after .name().
+            // We resolve the inner (unwrapped) CID right after upload.
+            const uploadName = `${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`;
+            const res = await pinata.upload.public.fileArray(files)
+              .name(uploadName)
               .keyvalues({
                 repository: process.env.GITHUB_REPOSITORY,
                 commit: process.env.GITHUB_SHA,
                 branch: process.env.GITHUB_REF_NAME
               });
-            console.log('Pinata CID:', result.cid);
-            console.log('Local CID: ', process.env.CONTENT_CID);
-            if (result.cid !== process.env.CONTENT_CID) {
-              console.warn('WARNING: CID mismatch — using Pinata CID');
+            const outerCid = res.cid;
+            console.log('Outer CID:', outerCid);
+
+            // Resolve the inner directory CID from the outer using Pinata's gateway.
+            // Content is immediately available there after upload.
+            let finalCid = process.env.LOCAL_CID; // fallback: kubo-computed CID
+            try {
+              // The folder entry name: SDK uses only the repo name part before any slash
+              const folderName = uploadName.includes('/') ? uploadName.split('/').slice(1).join('/') : uploadName;
+              const dagRes = await fetch(
+                `https://gateway.pinata.cloud/ipfs/${outerCid}?format=dag-json`,
+                { headers: { Authorization: `Bearer ${process.env.PINATA_JWT}` }, signal: AbortSignal.timeout(15000) }
+              );
+              if (dagRes.ok) {
+                const dag = await dagRes.json();
+                const link = dag.Links?.find(l => l.Name === folderName || l.Name === uploadName);
+                if (link) {
+                  finalCid = link.Hash['/'];
+                  console.log('Resolved inner CID from gateway:', finalCid);
+                } else {
+                  console.log('dag Links:', JSON.stringify(dag.Links?.map(l => l.Name)));
+                }
+              } else {
+                console.warn('Gateway dag-json fetch failed:', dagRes.status, await dagRes.text());
+              }
+            } catch (e) {
+              console.warn('Gateway resolution failed, using local CID:', e.message);
             }
-            const cid = result.cid || process.env.CONTENT_CID;
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${cid}\n`);
+
+            console.log('Final CID:', finalCid);
+            if (finalCid === process.env.LOCAL_CID) {
+              console.log('(using kubo-computed CID as fallback)');
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${finalCid}\n`);
           })().catch(e => { console.error(e); process.exit(1); });
           EOF
 
