@@ -30,34 +30,44 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Install Kubo (IPFS)
+        run: |
+          curl -sL https://dist.ipfs.tech/kubo/v0.32.0/kubo_v0.32.0_linux-amd64.tar.gz | tar xz
+          sudo install -m 0755 kubo/ipfs /usr/local/bin/ipfs
+          ipfs init --profile server
+
       - name: Deploy to IPFS via Pinata
         id: deploy
         env:
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
         run: |
-          npm install @pinata/sdk --no-save
-          node <<'EOF'
-          const fs = require('fs');
-          const pinataSDK = require('@pinata/sdk');
+          npm install pinata --no-save
 
-          const pinata = new pinataSDK({ pinataJWTKey: process.env.PINATA_JWT });
+          # Add the build directory to local IPFS — this is the canonical CID,
+          # no wrapper, index.html at the root of the directory.
+          CID=$(ipfs add -r --cid-version=1 --quieter build)
+          echo "Content CID: $CID"
+
+          # Export all blocks as a CAR file
+          ipfs dag export "$CID" > content.car
+
+          # Upload the CAR to Pinata; they pin the exact same CID
+          CONTENT_CID="$CID" node <<'EOF'
+          const fs = require('fs');
+          const { PinataSDK } = require('pinata');
+          const pinata = new PinataSDK({ pinataJwt: process.env.PINATA_JWT });
 
           (async () => {
-            const result = await pinata.pinFromFS('./build', {
-              pinataMetadata: {
-                name: `${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`,
-                keyvalues: {
-                  repository: process.env.GITHUB_REPOSITORY,
-                  commit: process.env.GITHUB_SHA,
-                  branch: process.env.GITHUB_REF_NAME
-                }
-              },
-              pinataOptions: {
-                wrapWithDirectory: false
-              }
-            });
-
-            const cid = result.IpfsHash;
+            const carBuffer = fs.readFileSync('content.car');
+            const carBlob = new Blob([carBuffer], { type: 'application/vnd.ipld.car' });
+            await pinata.upload.public.car(carBlob)
+              .name(`${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`)
+              .keyvalues({
+                repository: process.env.GITHUB_REPOSITORY,
+                commit: process.env.GITHUB_SHA,
+                branch: process.env.GITHUB_REF_NAME
+              });
+            const cid = process.env.CONTENT_CID;
             console.log('CID:', cid);
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${cid}\n`);
           })().catch(e => { console.error(e); process.exit(1); });
