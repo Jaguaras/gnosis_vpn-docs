@@ -30,30 +30,15 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Install Kubo and start daemon
-        run: |
-          curl -sL https://dist.ipfs.tech/kubo/v0.32.0/kubo_v0.32.0_linux-amd64.tar.gz | tar xz
-          sudo install -m 0755 kubo/ipfs /usr/local/bin/ipfs
-          ipfs init --profile server
-          ipfs daemon &
-          # Wait until the daemon has peers (connected to IPFS network)
-          echo "Waiting for IPFS daemon..."
-          for i in $(seq 1 30); do
-            ipfs swarm peers 2>/dev/null | grep -q . && echo "Daemon ready" && break
-            sleep 2
-          done
-
       - name: Deploy to IPFS via Pinata
         id: deploy
         env:
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
         run: |
           npm install pinata --no-save
-
           node <<'EOF'
           const fs = require('fs');
           const path = require('path');
-          const { execSync } = require('child_process');
           const { PinataSDK } = require('pinata');
           const pinata = new PinataSDK({ pinataJwt: process.env.PINATA_JWT });
 
@@ -83,9 +68,13 @@ jobs:
             const files = collect('build', 'build');
             console.log(`Uploading ${files.length} files...`);
 
-            const uploadName = `${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`;
+            // Pinata's fileArray wraps all files under a folder. With
+            // GITHUB_REPOSITORY = "org/repo", only "repo@sha" becomes the folder name.
+            const repoName = (process.env.GITHUB_REPOSITORY || '').split('/').pop();
+            const folderName = `${repoName}@${process.env.GITHUB_SHA}`;
+
             const res = await pinata.upload.public.fileArray(files)
-              .name(uploadName)
+              .name(`${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`)
               .keyvalues({
                 repository: process.env.GITHUB_REPOSITORY,
                 commit: process.env.GITHUB_SHA,
@@ -93,42 +82,45 @@ jobs:
               });
             const outerCid = res.cid;
             console.log('Outer CID:', outerCid);
+            console.log('Folder name:', folderName);
 
-            // Give Pinata a moment to announce the content on the DHT
-            await new Promise(r => setTimeout(r, 5000));
-
-            // Use the running kubo daemon to fetch the outer directory block
-            // from the IPFS network and extract the inner CID
+            // Resolve the inner (unwrapped) CID via X-Ipfs-Roots response header.
+            // Fetching any file under the folder returns this header listing all
+            // directory CIDs traversed: "outerCid,innerCid". We want index 1.
             let finalCid;
+            const url = `https://gateway.pinata.cloud/ipfs/${outerCid}/${encodeURIComponent(folderName)}/index.html`;
             try {
-              const lsOutput = execSync(`ipfs ls --cid-base=base32 /ipfs/${outerCid}`, { timeout: 30000 }).toString().trim();
-              console.log('ipfs ls output:', lsOutput);
-              // Output format: "<cid> <size> <name>"
-              finalCid = lsOutput.split(/\s+/)[0];
+              const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+              const roots = r.headers.get('X-Ipfs-Roots');
+              console.log('X-Ipfs-Roots:', roots);
+              if (roots) {
+                const parts = roots.split(',').map(s => s.trim());
+                finalCid = parts[1]; // parts[0]=outer, parts[1]=inner directory
+              }
             } catch (e) {
-              console.warn('ipfs ls failed:', e.message);
+              console.warn('Pinata gateway failed:', e.message);
             }
 
+            // Fallback: try ipfs.io
             if (!finalCid) {
-              // Last resort: use the folderName to guess the inner CID via gateway dag-json
               try {
-                const folderName = uploadName.includes('/') ? uploadName.split('/').slice(1).join('/') : uploadName;
-                const dagRes = await fetch(
-                  `https://gateway.pinata.cloud/ipfs/${outerCid}?format=dag-json`,
-                  { headers: { Authorization: `Bearer ${process.env.PINATA_JWT}` }, signal: AbortSignal.timeout(15000) }
+                const r = await fetch(
+                  `https://ipfs.io/ipfs/${outerCid}/${encodeURIComponent(folderName)}/index.html`,
+                  { signal: AbortSignal.timeout(20000) }
                 );
-                if (dagRes.ok) {
-                  const dag = await dagRes.json();
-                  const link = dag.Links?.find(l => l.Name === folderName || l.Name === uploadName);
-                  if (link) finalCid = link.Hash['/'];
+                const roots = r.headers.get('X-Ipfs-Roots');
+                console.log('X-Ipfs-Roots (ipfs.io):', roots);
+                if (roots) {
+                  const parts = roots.split(',').map(s => s.trim());
+                  finalCid = parts[1];
                 }
               } catch (e) {
-                console.warn('Gateway dag-json also failed:', e.message);
+                console.warn('ipfs.io fallback failed:', e.message);
               }
             }
 
             if (!finalCid) {
-              throw new Error(`Could not resolve inner CID from outer CID ${outerCid}. Check IPFS daemon connectivity.`);
+              throw new Error(`Could not resolve inner CID. Outer: ${outerCid}, folder: ${folderName}`);
             }
 
             console.log('Inner CID:', finalCid);
