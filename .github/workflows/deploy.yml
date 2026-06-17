@@ -120,5 +120,16 @@ jobs:
 
       - name: Show result
         run: |
-          echo "Deployed CID: ${{ steps.deploy.outputs.cid }}"
-          echo "Gateway: https://ipfs.io/ipfs/${{ steps.deploy.outputs.cid }}"
+          CID="${{ steps.deploy.outputs.cid }}"
+          echo "Deployed CID: $CID"
+          {
+            echo "## IPFS Deployment"
+            echo ""
+            echo "**CID:** \`$CID\`"
+            echo ""
+            echo "| Gateway | Link |"
+            echo "|---------|------|"
+            echo "| inbrowser.link | https://${CID}.ipfs.inbrowser.link/ |"
+            echo "| ipfs.io | https://ipfs.io/ipfs/${CID}/ |"
+            echo "| Cloudflare | https://cloudflare-ipfs.com/ipfs/${CID}/ |"
+          } >> "$GITHUB_STEP_SUMMARY"
