@@ -107,8 +107,8 @@ const config = {
           {
             title: 'More',
             items: [
-              {label: 'Onboarding tool', href: 'https://self-onboarding.gnosisvpn.com/'},
-              {label: 'Downloads', href: 'https://downloads.vpn.gnosis.eth.limo/'},
+              {label: 'Onboarding tool', href: 'https://self-onboarding.gnosisvpn.com'},
+              {label: 'Downloads', href: 'https://downloads.vpn.gnosis.eth.limo'},
             ],
           },
         ],
