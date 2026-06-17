@@ -130,14 +130,5 @@ jobs:
 
       - name: Show result
         run: |
-          CID="${{ steps.deploy.outputs.cid }}"
-          echo "Deployed CID: $CID"
-          echo "## IPFS Deployment" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**CID:** \`$CID\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Gateway | Link |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| inbrowser.link | https://${CID}.ipfs.inbrowser.link/ |" >> $GITHUB_STEP_SUMMARY
-          echo "| ipfs.io | https://ipfs.io/ipfs/${CID}/ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cloudflare | https://cloudflare-ipfs.com/ipfs/${CID}/ |" >> $GITHUB_STEP_SUMMARY
+          echo "Deployed CID: ${{ steps.deploy.outputs.cid }}"
+          echo "Gateway: https://ipfs.io/ipfs/${{ steps.deploy.outputs.cid }}"
