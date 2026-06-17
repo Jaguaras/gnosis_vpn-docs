@@ -30,75 +30,53 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Install Kubo (IPFS)
+        run: |
+          curl -sL https://dist.ipfs.tech/kubo/v0.32.0/kubo_v0.32.0_linux-amd64.tar.gz | tar xz
+          sudo install -m 0755 kubo/ipfs /usr/local/bin/ipfs
+          ipfs init --profile server
+
       - name: Deploy to IPFS via Pinata
         id: deploy
         env:
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
         run: |
-          node <<'EOF'
+          npm install pinata --no-save
+
+          # Build the IPFS directory locally — gives the canonical CID with
+          # index.html at root, no wrapper. main.js (432KB) gets chunked here.
+          CID=$(ipfs add -r --cid-version=1 --quieter build)
+          echo "Content CID: $CID"
+
+          # Export all blocks as a CAR. Pinata will store exactly these blocks,
+          # so the returned CID will equal the one kubo computed above.
+          ipfs dag export "$CID" > content.car
+
+          # Upload the CAR via pinata.upload.public.file().car()
+          CONTENT_CID="$CID" node <<'EOF'
           const fs = require('fs');
-          const path = require('path');
-
-          const mime = {
-            '.html':'text/html','.css':'text/css','.js':'application/javascript',
-            '.json':'application/json','.png':'image/png','.jpg':'image/jpeg',
-            '.jpeg':'image/jpeg','.gif':'image/gif','.svg':'image/svg+xml',
-            '.txt':'text/plain','.md':'text/markdown','.wasm':'application/wasm',
-            '.woff':'font/woff','.woff2':'font/woff2','.ico':'image/x-icon'
-          };
-
-          function collect(dir, base, out = []) {
-            for (const name of fs.readdirSync(dir)) {
-              const full = path.join(dir, name);
-              if (fs.statSync(full).isDirectory()) {
-                collect(full, base, out);
-              } else {
-                const rel = path.relative(base, full);
-                const buf = fs.readFileSync(full);
-                out.push({ buf, rel, type: mime[path.extname(name).toLowerCase()] || 'application/octet-stream' });
-              }
-            }
-            return out;
-          }
+          const { PinataSDK } = require('pinata');
+          const pinata = new PinataSDK({ pinataJwt: process.env.PINATA_JWT });
 
           (async () => {
-            const files = collect('build', 'build');
-            console.log(`Uploading ${files.length} files...`);
-
-            const form = new FormData();
-            for (const { buf, rel, type } of files) {
-              // Use bare relative paths (e.g. "index.html", "docs/intro/index.html").
-              // wrapWithDirectory:true below tells Pinata to place all files under
-              // one new directory and return that directory's CID — no extra wrapper.
-              form.append('file', new Blob([buf], { type }), rel);
-            }
-            form.append('pinataOptions', JSON.stringify({
-              wrapWithDirectory: true,
-              cidVersion: 1
-            }));
-            form.append('pinataMetadata', JSON.stringify({
-              name: `${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`,
-              keyvalues: {
+            const buf = fs.readFileSync('content.car');
+            const carFile = new File([buf], 'upload.car', { type: 'application/vnd.ipld.car' });
+            const result = await pinata.upload.public
+              .file(carFile)
+              .car()
+              .name(`${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`)
+              .keyvalues({
                 repository: process.env.GITHUB_REPOSITORY,
                 commit: process.env.GITHUB_SHA,
                 branch: process.env.GITHUB_REF_NAME
-              }
-            }));
-
-            const res = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${process.env.PINATA_JWT}` },
-              body: form
-            });
-
-            if (!res.ok) {
-              const text = await res.text();
-              throw new Error(`Pinata API error: ${res.status} ${text}`);
+              });
+            console.log('Pinata CID:', result.cid);
+            console.log('Local CID: ', process.env.CONTENT_CID);
+            if (result.cid !== process.env.CONTENT_CID) {
+              console.warn('WARNING: CID mismatch — using Pinata CID');
             }
-
-            const data = await res.json();
-            console.log('CID:', data.IpfsHash);
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${data.IpfsHash}\n`);
+            const cid = result.cid || process.env.CONTENT_CID;
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${cid}\n`);
           })().catch(e => { console.error(e); process.exit(1); });
           EOF
 
