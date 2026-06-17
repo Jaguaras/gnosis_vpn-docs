@@ -35,13 +35,12 @@ jobs:
         env:
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
         run: |
-          npm install pinata --no-save
+          npm install form-data node-fetch@2 --no-save
           node <<'EOF'
           const fs = require('fs');
           const path = require('path');
-          const { PinataSDK } = require('pinata');
-
-          const pinata = new PinataSDK({ pinataJwt: process.env.PINATA_JWT });
+          const FormData = require('form-data');
+          const fetch = require('node-fetch');
 
           const mime = {
             '.html':'text/html','.css':'text/css','.js':'application/javascript',
@@ -58,8 +57,7 @@ jobs:
                 collect(full, base, out);
               } else {
                 const rel = path.relative(base, full);
-                const buf = fs.readFileSync(full);
-                out.push(new File([buf], rel, { type: mime[path.extname(name).toLowerCase()] || 'application/octet-stream' }));
+                out.push({ full, rel, type: mime[path.extname(name).toLowerCase()] || 'application/octet-stream' });
               }
             }
             return out;
@@ -67,33 +65,46 @@ jobs:
 
           (async () => {
             const sourceDir = 'build';
-            await pinata.testAuthentication();
             const files = collect(sourceDir, sourceDir);
             console.log(`Uploading ${files.length} files...`);
-            const res = await pinata.upload.public.fileArray(files)
-              .name(`${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`)
-              .keyvalues({
+
+            const form = new FormData();
+            for (const { full, rel, type } of files) {
+              form.append('file', fs.createReadStream(full), {
+                filename: `site/${rel}`,
+                contentType: type
+              });
+            }
+            // wrapWithDirectory: false means the returned CID points directly
+            // to the directory containing index.html — no outer wrapper.
+            form.append('pinataOptions', JSON.stringify({ wrapWithDirectory: false }));
+            form.append('pinataMetadata', JSON.stringify({
+              name: `${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`,
+              keyvalues: {
                 repository: process.env.GITHUB_REPOSITORY,
                 commit: process.env.GITHUB_SHA,
                 branch: process.env.GITHUB_REF_NAME
-              });
-            // fileArray wraps files under a subdirectory named after .name().
-            // Resolve the inner directory CID so gateway links serve from root.
-            const uploadName = `${process.env.GITHUB_REPOSITORY}@${process.env.GITHUB_SHA}`;
-            let finalCid = res.cid;
-            try {
-              const dagRes = await fetch(`https://dweb.link/api/v0/ls?arg=${res.cid}`, { method: 'POST' });
-              if (dagRes.ok) {
-                const data = await dagRes.json();
-                const link = data.Objects?.[0]?.Links?.find(l => l.Name === uploadName);
-                if (link) finalCid = link.Hash;
               }
-            } catch (e) {
-              console.warn('Could not resolve inner CID, falling back to outer:', e.message);
+            }));
+
+            const res = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.PINATA_JWT}`,
+                ...form.getHeaders()
+              },
+              body: form
+            });
+
+            if (!res.ok) {
+              const text = await res.text();
+              throw new Error(`Pinata API error: ${res.status} ${text}`);
             }
-            console.log('Outer CID:', res.cid);
-            console.log('Content CID:', finalCid);
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${finalCid}\n`);
+
+            const data = await res.json();
+            const cid = data.IpfsHash;
+            console.log('CID:', cid);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${cid}\n`);
           })().catch(e => { console.error(e); process.exit(1); });
           EOF
 
