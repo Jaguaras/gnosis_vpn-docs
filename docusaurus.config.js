@@ -8,7 +8,7 @@ const config = {
   favicon: 'img/favicon.ico',
 
   // Set these to your real deployment URL when you have one.
-  url: 'https://andste.eth.limo',
+  url: 'https://docs.vpn.gnosis.eth.limo',
   baseUrl: '/',
 
   // IMPORTANT for IPFS gateway routing.
@@ -109,6 +109,7 @@ const config = {
             items: [
               {label: 'Onboarding tool', href: 'https://self-onboarding.gnosisvpn.com'},
               {label: 'Downloads', href: 'https://downloads.vpn.gnosis.eth.limo'},
+              {label: 'Docs for LLMs', href: 'pathname:///llms.txt'}
             ],
           },
         ],
