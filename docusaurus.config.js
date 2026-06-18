@@ -39,6 +39,13 @@ const config = {
         type: 'text/markdown',
       },
     },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'google-site-verification',
+        content: 'CsofUSc0BNyfcE2zikbCS7MqgyZ88s6062MXHzfrNs',
+      }
+    }
   ],
   presets: [
     [
