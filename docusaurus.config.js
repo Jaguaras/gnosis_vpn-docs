@@ -43,7 +43,7 @@ const config = {
       tagName: 'meta',
       attributes: {
         name: 'google-site-verification',
-        content: 'CsofUSc0BNyfcE2zikbCS7MqgyZ88s6062MXHzfrNs',
+        content: 'ZCsofUSc0BNyfcE2zikbCS7MqgyZ88s6062MXHzfrNs',
       }
     }
   ],
